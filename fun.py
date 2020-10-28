@@ -3,9 +3,74 @@ import networkx as nx
 from scipy.integrate import quad
 import scipy.linalg as la
 from matplotlib import pyplot as plt
+from scipy.integrate import quad
 import graphs as g
 import random, time, math, json
 
+def cdf_(N, y, v):
+    tr = y - v
+    return len(tr[tr>=0]) / N
+
+def cdf(N,y,v):
+    p = np.zeros((np.shape(y)))
+    for i in range(len(y)):
+        tr = y[i] - v
+        p[i] =  len(tr[tr>=0])/N
+    return(p)
+
+def normalize_eigenv(eigenvc):
+    return(
+        (eigenvc - min(eigenvc)) / (max(eigenvc) - min(eigenvc))
+    )
+
+def integrand_kd(y, N_i, N_j, v_ri, v_rj):
+    return np.abs((np.sum(y - v_ri >= 0) / N_i) - (np.sum(y - v_rj >= 0) / N_j))
+
+def graphs_kruglov_distance(eig_Gi, eig_Gj):
+    signs=[-1,1]
+    N_i= len(eig_Gi)
+    N_j= len(eig_Gj)
+    Mij = min(N_i, N_j)
+    eigenvect_dist = np.zeros((Mij - 1))
+    for r in range(1, Mij):
+        temp=[]
+        for  sign_s in signs:
+            for sign_l in signs:
+                v_ri = normalize_eigenv(sign_s * eig_Gi[r][1])
+                v_rj = normalize_eigenv(sign_l * eig_Gj[r][1])
+                temp.append(kruglov_distance(N_i,N_j,v_ri,v_rj))
+        eigenvect_dist[r - 1] = min(temp)
+    return(eigenvect_dist, np.sum(eigenvect_dist) / (Mij - 1)) 
+
+def kruglov_distance(N_i,N_j,v_ri,v_rj):
+    return (
+        quad(
+            integrand_kd, 0., 1., 
+            epsabs = 1e-4, limit = 2000, 
+            args=(N_i, N_j, v_ri, v_rj),
+        )[0]
+    )
+
+def sgd_matrix(reign_lists):
+    N_graphs = len(reign_lists)
+    graph_dist_matx = np.zeros((N_graphs,len(reign_lists)))
+    for i in range(N_graphs):
+        for j in range(i, N_graphs):
+            _, graph_dist = graphs_kruglov_distance(reign_lists[i],
+                                                reign_lists[j])
+            graph_dist_matx[i,j] = graph_dist
+            graph_dist_matx[j,i] = graph_dist
+    return graph_dist_matx
+
+ 
+def hamming_distance(A_p0, A_p_list):
+    n=len(A_p0)
+    hamming_distance_list = np.zeros((len(A_p_list)))
+    for i in range(len(A_p_list)):
+        hamming_distance_list[i] = np.sum(np.abs(A_p0-A_p_list[i]))/(n*(n-1))
+    return(hamming_distance_list)
+
+    
 def sort_eigenv(eigenvalues, eigenvectors):
     return sorted(zip(eigenvalues.real,
                       eigenvectors.T), key=lambda x: x[0])
@@ -109,8 +174,8 @@ def spectral_distance(ctd_eignv_p0, ctd_eigenv_p_dic, replicates, print_ = True)
                 temp_integral = []
                 for  sign_s in signs:
                     for sign_l in signs:
-                        vri = sorted(g.normalize_eigenv(sign_s * G1[r][1]))
-                        vrj = sorted(g.normalize_eigenv(sign_l * G2_dic_p[r][1]))
+                        vri = sorted(normalize_eigenv(sign_s * G1[r][1]))
+                        vrj = sorted(normalize_eigenv(sign_l * G2_dic_p[r][1]))
                         temp_integral.append(cdf_dist(vri, vrj))  
                 integral_list.append(min(temp_integral))
             replicate_distance.append(sum(integral_list)/(Mij - 1))
@@ -150,8 +215,8 @@ def pairwise_spectral_dist(eigen_graphi, eigen_graphj):
         temp_integral = []
         for  sign_s in signs:
             for sign_l in signs:
-                vri = sorted(g.normalize_eigenv(sign_s * eigen_graphi[r][1]))
-                vrj = sorted(g.normalize_eigenv(sign_l * eigen_graphj[r][1]))
+                vri = sorted(normalize_eigenv(sign_s * eigen_graphi[r][1]))
+                vrj = sorted(normalize_eigenv(sign_l * eigen_graphj[r][1]))
                 temp_integral.append(f.cdf_dist(vri, vrj))  
         integral_list.append(min(temp_integral))
     return(sum(integral_list)/(Mij - 1))
