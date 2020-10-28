@@ -10,16 +10,10 @@ import networkx as nx
 import seaborn as sns
 import pandas as pd
 
-def sgd_matrix(reign_lists):
-    N_graphs = len(reign_lists)
-    graph_dist_matx = np.zeros((N_graphs,len(reign_lists)))
-    for i in range(N_graphs):
-        for j in range(i, N_graphs):
-            _, graph_dist = graph_pair_distance(reign_lists[i],
-                                                reign_lists[j])
-            graph_dist_matx[i,j] = graph_dist
-            graph_dist_matx[j,i] = graph_dist
-    return graph_dist_matx
+
+def cdf_(N, y, v):
+    tr = y - v
+    return len(tr[tr>=0]) / N
 
 def cdf(N,y,v):
     p = np.zeros((np.shape(y)))
@@ -28,39 +22,59 @@ def cdf(N,y,v):
         p[i] =  len(tr[tr>=0])/N
     return(p)
 
-def cdf_(N,y,v):
-    tr = y - v
-    p =  len(tr[tr>=0])/N
-    return(p)
-
 def normalize_eigenv(eigenvc):
-    return((eigenvc - min(eigenvc)
-           )/(max(eigenvc) - min(eigenvc)))
+    return(
+        (eigenvc - min(eigenvc)) / (max(eigenvc) - min(eigenvc))
+    )
 
+def integrand_kd(y, N_i, N_j, v_ri, v_rj):
+    return np.abs((np.sum(y - v_ri >= 0) / N_i) - (np.sum(y - v_rj >= 0) / N_j))
 
-def integrand(y, N_i, N_j, v_ri, v_rj):
-    return np.abs(cdf_(N_i,y,v_ri) - cdf_(N_j,y,v_rj))
+def graphs_kruglov_distance(eig_Gi, eig_Gj):
+    signs=[-1,1]
+    N_i= len(eig_Gi)
+    N_j= len(eig_Gj)
+    Mij = min(N_i, N_j)
+    eigenvect_dist = np.zeros((Mij - 1))
+    for r in range(1, Mij):
+        temp=[]
+        for  sign_s in signs:
+            for sign_l in signs:
+                v_ri = normalize_eigenv(sign_s * eig_Gi[r][1])
+                v_rj = normalize_eigenv(sign_l * eig_Gj[r][1])
+                temp.append(kruglov_distance(N_i,N_j,v_ri,v_rj))
+        eigenvect_dist[r - 1] = min(temp)
+    return(eigenvect_dist, np.sum(eigenvect_dist) / (Mij - 1)) 
 
-def cdf_distance(eig_G1, eig_G2, r):
-    N_i= len(eig_G1)
-    N_j= len(eig_G2)
-    v_ri = normalize_eigenv(sorted(eig_G1[r][1],
-                                   key=lambda x: x))
-    v_rj = normalize_eigenv(sorted(eig_G2[r][1],
-                                   key=lambda x: x))
-    return (quad(integrand, -np.inf, np.inf, 
-                 epsabs = 1e-4, limit = 500, 
-                 args=(N_i,N_j,v_ri,v_rj))[0])
-    
-    
-def graph_pair_distance(eig_G1,eig_G2):
-    Mij = min(len(eig_G1), len(eig_G2))
-    eigenvect_dist = np.zeros((Mij-1))
-    for i in range(1,Mij):
-        eigenvect_dist[i-1] = cdf_distance(eig_G1,
-                                           eig_G2, i)
-    return(eigenvect_dist,
-           sum(eigenvect_dist)/(Mij-1))  
+def kruglov_distance(N_i,N_j,v_ri,v_rj):
+    return (
+        quad(
+            integrand_kd, 0., 1., 
+            epsabs = 1e-4, limit = 2000, 
+            args=(N_i, N_j, v_ri, v_rj),
+        )[0]
+    )
+
+def sgd_matrix(reign_lists):
+    N_graphs = len(reign_lists)
+    graph_dist_matx = np.zeros((N_graphs,len(reign_lists)))
+    for i in range(N_graphs):
+        for j in range(i, N_graphs):
+            _, graph_dist = graphs_kruglov_distance(reign_lists[i],
+                                                reign_lists[j])
+            graph_dist_matx[i,j] = graph_dist
+            graph_dist_matx[j,i] = graph_dist
+    return graph_dist_matx
+
+ 
+
+def hamming_distance(A_p0, A_p_list):
+    n=len(A_p0)
+    hamming_distance_list = np.zeros((len(A_p_list)))
+    for i in range(len(A_p_list)):
+        hamming_distance_list[i] = np.sum(np.abs(A_p0-A_p_list[i]))/(n*(n-1))
+    return(hamming_distance_list)
+
 
 def taro_graph():
     # Create the set of all members
@@ -69,6 +83,7 @@ def taro_graph():
     G = nx.Graph()
     G.add_nodes_from(all_members)
     G.name = "SCHWIMMER TARO EXCHANGE"
+
 
     tarodata = """\
 0 1 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0
