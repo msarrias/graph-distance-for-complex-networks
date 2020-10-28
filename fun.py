@@ -24,7 +24,9 @@ def normalize_eigenv(eigenvc):
     )
 
 def integrand_kd(y, N_i, N_j, v_ri, v_rj):
-    return np.abs((np.sum(y - v_ri >= 0) / N_i) - (np.sum(y - v_rj >= 0) / N_j))
+    cdf_i = np.sum(y - v_ri >= 0) / N_i
+    cdf_j = np.sum(y - v_rj >= 0) / N_j
+    return np.abs(cdf_i - cdf_j)
 
 def graphs_kruglov_distance(eig_Gi, eig_Gj):
     signs=[-1,1]
@@ -62,14 +64,6 @@ def sgd_matrix(reign_lists):
             graph_dist_matx[j,i] = graph_dist
     return graph_dist_matx
 
- 
-def hamming_distance(A_p0, A_p_list):
-    n=len(A_p0)
-    hamming_distance_list = np.zeros((len(A_p_list)))
-    for i in range(len(A_p_list)):
-        hamming_distance_list[i] = np.sum(np.abs(A_p0-A_p_list[i]))/(n*(n-1))
-    return(hamming_distance_list)
-
     
 def sort_eigenv(eigenvalues, eigenvectors):
     return sorted(zip(eigenvalues.real,
@@ -80,14 +74,16 @@ def adj_degree_matrices(graph):
     D = np.diag(np.asarray(sum(A))[0])
     return A, D
 
-def CTD_eigenv(vol_V, sorted_eigenv, D, eps):
+def ctd_eigenv(vol_V, sorted_eigenv, D, eps):
     ctd_eign = {}
     for e in range(len(sorted_eigenv)):
-        eigenv = np.sqrt( vol_V / ((sorted_eigenv[e][0] * np.diagonal(D)) + eps)) * sorted_eigenv[e][1]
+        scale_factor = (sorted_eigenv[e][0] * np.diagonal(D) + eps
+        eigenv = np.sqrt( vol_V /scale_factor) * sorted_eigenv[e][1]
         ctd_eign[e] = [sorted_eigenv[e][0], eigenv]
     return ctd_eign
 
-def eigen_decomp_WS_models(watts_strogatz_graphs_dic, replicates, solve = "standard_L", ctd = False):
+def eigen_decomp_WS_models(watts_strogatz_graphs_dic, replicates,
+                           solve = "standard_L", ctd = False):
     eps=1e-10
     times_dic = {}
     eigenv_dic_p = {}
@@ -111,25 +107,28 @@ def eigen_decomp_WS_models(watts_strogatz_graphs_dic, replicates, solve = "stand
                 
             if solve == "standard_Lsym":
                 D_invsq = np.diag(1/np.sqrt(np.diag(D)))
-                L_sym_rep = np.eye(D.shape[0]) - np.dot(D_invsq, A_dic_p[j]).dot(D_invsq)
+                I = np.eye(D.shape[0])
+                L_sym_rep = I - np.dot(D_invsq, A_dic_p[j]).dot(D_invsq)
                 eigenvalues, eigenvectors = la.eig(L_sym_rep)
+                
                 if ctd:
-                    eigenv_dic[j] = CTD_eigenv(vol_V, 
-                                                 sort_eigenv(eigenvalues,
-                                                             eigenvectors), D, eps)
+                    eigenv_dic[j] = ctd_eigenv(vol_V, 
+                                               sort_eigenv(eigenvalues,
+                                                           eigenvectors),
+                                               D, eps)
                 else:
                     eigenv_dic[j] = sort_eigenv(eigenvalues,eigenvectors)
                 
             if solve == "generalized":
                 eigenvalues, eigenvectors = la.eig(D - A_dic_p[j], D)
                 if ctd:
-                    eigenv_dic[j] = CTD_eigenv(vol_V, 
-                                                 sort_eigenv(eigenvalues,
-                                                             eigenvectors), D, eps)
+                    eigenv_dic[j] = ctd_eigenv(vol_V, 
+                                               sort_eigenv(eigenvalues,
+                                                           eigenvectors),
+                                               D, eps)
                 else:
                     eigenv_dic[j] = sort_eigenv(eigenvalues,eigenvectors)
                     
-            
             tac_i = time.time()
             times.append((tac_i - tic_i) / 60)  
         A_dic[ps] =  A_dic_p
@@ -145,11 +144,23 @@ def hamming_dist_models(A_p0, A_dic, replicates):
         A_ps = list(A_dic[ps].values())
         hamming_distances = []
         for j in range(replicates):
-            hamming_distances.append(np.sum(np.abs(A_p0 - A_ps[j])) / (n * (n - 1)))
+            adj_dif = np.abs(A_p0 - A_ps[j])
+            hamming_distances.append(np.sum(adj_dif) / (n * (n - 1)))
         haming_distance_dic[ps] = hamming_distances
     return haming_distance_dic
 
-def spectral_distance(ctd_eignv_p0, ctd_eigenv_p_dic, replicates, print_ = True):
+def hamming_distance(A_p0, A_p_list):
+    n=len(A_p0)
+    hamming_distance_list = np.zeros((len(A_p_list)))
+    for i in range(len(A_p_list)):
+        adj_dif = np.abs(A_p0 - A_p_list[i])
+        hamming_distance_list[i] = np.sum(adj_dif) / (n * (n - 1))
+    return(hamming_distance_list)
+
+                        
+def spectral_distance(ctd_eignv_p0, ctd_eigenv_p_dic,
+                      replicates, print_ = True):
+                        
     G1 = ctd_eignv_p0
     Ni = len(G1)
     G2_dic = ctd_eigenv_p_dic
@@ -198,7 +209,8 @@ def cdf_dist(vri, vrj):
     Nj = len(vrj)
     for idx, sorted_elt in enumerate(u[1:]):
         # adding rectangle area, L * W
-        cdf_distance += (u[idx] - u[idx - 1]) * abs((vri_count / Ni) - (vrj_count / Nj))
+        cdf_distance += (u[idx] - u[idx - 1]) * abs((vri_count / Ni) 
+                                                    - (vrj_count / Nj))
         if sorted_elt in vri:
             vri_count += 1
         if sorted_elt in vrj:
