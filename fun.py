@@ -4,10 +4,21 @@ from scipy.integrate import quad
 import scipy.linalg as la
 from matplotlib import pyplot as plt
 from scipy.integrate import quad
-import graphs as g
 import random, time, math, json
 from collections import Counter
 
+#=========================SIMULATED-GRAPHS===============================#
+def ERB(N, p):
+    g = nx.Graph() 
+    g.add_nodes_from(range(1, N + 1)) 
+    for i in g.nodes(): 
+        for j in g.nodes(): 
+            if (i < j):  
+                eps = random.random() 
+                if (eps < p): 
+                    g.add_edge(i, j)
+    return g
+#=========================================================================#
 def cdf_(N, y, v):
     tr = y - v
     return len(tr[tr>=0]) / N
@@ -53,7 +64,6 @@ def graphs_kruglov_distance(eig_Gi, eig_Gj):
                 temp.append(kruglov_distance(N_i,N_j,v_ri,v_rj))
         eigenvect_dist[r - 1] = min(temp)
     return(eigenvect_dist, np.sum(eigenvect_dist) / (Mij - 1)) 
-
 
 
 def sgd_matrix(reign_lists):
@@ -262,4 +272,71 @@ def savage_plot(mean_list, p_list,  p0, std_list, hd_avg_list, ylims_sgd, y_lims
     ax2.tick_params(axis = 'y', labelcolor = color)
     fig.tight_layout()
     plt.show()
-    
+# ===================================================================================== #
+def taro_graph():
+    # Create the set of all members
+    all_members = set(range(22))
+
+    G = nx.Graph()
+    G.add_nodes_from(all_members)
+    G.name = "SCHWIMMER TARO EXCHANGE"
+
+
+    tarodata = """\
+    0 1 0 0 1 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0
+    1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0
+    0 1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0
+    0 0 1 0 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    1 0 0 1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 0
+    0 0 0 1 1 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 1 0 1 0 1 0 0 0 0 0 0 0 1 0 0 1 0 0 0
+    0 0 0 0 0 0 1 0 1 1 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 1 0 1 0 0 1 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 1 1 0 1 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 1 0 1 0 0 0 0 0 1 0 1 1 0
+    0 0 0 0 0 0 0 0 0 0 1 0 1 1 1 0 0 0 1 0 0 0
+    0 0 0 0 0 0 0 0 1 0 0 1 0 1 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 1 1 0 1 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 1 0 1 0 1 0 0 0 0 0 0
+    0 0 0 0 0 0 1 0 0 0 0 0 0 0 1 0 1 0 0 0 0 0
+    1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 1 0 1 0 0 0 1
+    0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 1
+    0 0 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 0 1
+    0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 1 0
+    0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0 0 0 1 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 1 1 0 0 0"""
+
+    for row, line in enumerate(tarodata.split('\n')):
+        thisrow = [int(b) for b in line.split()]
+        for col, entry in enumerate(thisrow):
+            if entry == 1:
+                G.add_edge(row, col)
+    return G
+
+def savage_plot_(graphs_list):
+    f, axs = plt.subplots(2,3,figsize=(20,15))
+    nx.draw_networkx(graphs_list[0], ax=axs[0,0], 
+                     node_color='lightgrey')
+    axs[0,0].axis('off')
+    axs[0,0].set_title("2D grid")
+    nx.draw_networkx(graphs_list[1], ax=axs[0,1], 
+                     node_color='lightgreen')
+    axs[0,1].axis('off')
+    axs[0,1].set_title("Dolphins")
+    nx.draw_networkx(graphs_list[2], ax=axs[0,2], 
+                     node_color='lightblue')
+    axs[0,2].axis('off')
+    axs[0,2].set_title("Taro")
+    nx.draw_networkx(graphs_list[3], ax=axs[1,0],
+                     node_color='lightpink')
+    axs[1,0].axis('off')
+    axs[1,0].set_title("Karate")
+    nx.draw_networkx(graphs_list[4], ax=axs[1,1],
+                     node_color='lightyellow')
+    axs[1,1].axis('off')
+    axs[1,1].set_title("Southern women")
+    nx.draw_networkx(graphs_list[5], ax=axs[1,2], 
+                     node_color='lightgrey')
+    axs[1,2].axis('off')
+    axs[1,2].set_title("Florentine Families")
+    plt.show()   

@@ -5,21 +5,21 @@ import scipy.linalg as la
 from matplotlib import pyplot as plt
 import random, time, math, json
 from collections import Counter
+from numpy.linalg import eigh
 
-class SGD_WSmodels:
+class SGD:
     
-    def __init__(self, p0, k, solve, G_p0, G_p):
+    def __init__(self, ref, solve, G_ref, G):
         
-        self.G_p0 = G_p0
-        self.p0 = p0
-        self.n = len(G_p0)
-        self.G_p = G_p
-        self.k = k
-        self.p = list(G_p.keys())
-        self.replicates = len(G_p[self.p[0]])
+        self.G_ref = G_ref
+        self.ref = ref
+        self.n = len(G_ref)
+        self.G = G
+        self.keys = list(G.keys())
+        self.replicates = len(G[self.keys[0]])
         self.eps = 1e-10
         self.solve = solve
-        self.signs = [-1, 1]
+        self.signs = [[1,1], [-1,1]]
     
     def adj_degree_matrices(self, graph):
         A = (nx.adjacency_matrix(graph)).todense()
@@ -54,93 +54,91 @@ class SGD_WSmodels:
             vrj_count += vrj_counter.get(sorted_elt, 0)
         return cdf_distance
 
-    def eigenspectrum_G_p0(self):
-        self.A_p0, self.D_p0 = self.adj_degree_matrices(self.G_p0)
+    def eigenspectrum_G_ref(self):
+        self.A_ref, self.D_ref = self.adj_degree_matrices(self.G_ref)
         
         if self.solve == "standard":
-            eigenvs_p0, eigenvec_p0 = la.eig(self.D_p0 - self.A_p0)
-            self.sort_eigenv_p0 = self.sort_eigenv(eigenvs_p0, 
-                                                   eigenvec_p0)
+            eigenvs_ref, eigenvec_ref = la.eigh(self.D_ref - self.A_ref)
+            self.sort_eigenv_ref = self.sort_eigenv(eigenvs_ref, 
+                                                   eigenvec_ref)
         
         if self.solve == "generalized":
-            eigenvs_p0, eigenvec_p0 = la.eig(self.D_p0 - self.A_p0, 
-                                             self.D_p0)
-            self.sort_eigenv_p0 = self.sort_eigenv(eigenvs_p0,
-                                                   eigenvec_p0)
+            eigenvs_ref, eigenvec_ref = la.eig(self.D_ref - self.A_ref, 
+                                             self.D_ref)
+            self.sort_eigenv_ref = self.sort_eigenv(eigenvs_ref,
+                                                   eigenvec_ref)
         print(f'Eigen-decomposition of reference model with ' \
-              f'rewiring prob p : {self.p0} completed.')
+              f'ref param : {self.ref} completed.')
     
-    def reset_G_p0(self, new_p0, new_G_p0):
-        self.G_p0 = new_G_p0
-        self.p0 = new_p0
+    def reset_G_ref(self, new_ref, new_G_ref):
+        self.G_ref = new_G_ref
+        self.ref = new_ref
         
-    def eigenspectrum_G_p(self):
+    def eigenspectrum_G(self):
         tic = time.time() 
         self.sort_eigenv_dic = {}
-        self.A_dic_G_p = {}
+        self.A_dic_G = {}
         
         if self.solve == "standard":
-            for ps in self.p:
+            for key in self.keys:
                 eigenv_dic = {}
-                A_dic_p = {}
+                A_dic = {}
                 for j in range(self.replicates):
-                    A_dic_p[j], D = self.adj_degree_matrices(self.G_p[ps][j])
-                    eigenvs, eigenvcts = la.eig(D - A_dic_p[j])
+                    A_dic[j], D = self.adj_degree_matrices(self.G[key][j])
+                    eigenvs, eigenvcts = la.eigh(D - A_dic[j])
                     eigenv_dic[j] = self.sort_eigenv(eigenvs, eigenvcts) 
-                self.A_dic_G_p[ps] =  A_dic_p
-                self.sort_eigenv_dic[ps] = eigenv_dic
+                self.A_dic_G[key] =  A_dic
+                self.sort_eigenv_dic[key] = eigenv_dic
         
         if self.solve == "generalized":
-             for ps in self.p:
+             for key in self.keys:
                 eigenv_dic = {}
-                A_dic_p = {}
+                A_dic = {}
                 for j in range(self.replicates):
-                    A_dic_p[j], D = self.adj_degree_matrices(self.G_p[ps][j])
-                    eigenvs, eigenvcts = la.eig(D - A_dic_p[j], D)
+                    A_dic[j], D = self.adj_degree_matrices(self.G[key][j])
+                    eigenvs, eigenvcts = la.eig(D - A_dic[j], D)
                     eigenv_dic[j] = self.sort_eigenv(eigenvs, eigenvcts)
-                self.A_dic_G_p[ps] =  A_dic_p
-                self.sort_eigenv_dic[ps] = eigenv_dic
+                self.A_dic_G[key] =  A_dic
+                self.sort_eigenv_dic[key] = eigenv_dic
             
-        print(f'Eigen-decomposition of the {self.replicates * len(self.p)}' \
-              f' WS models completed.')
+        print(f'Eigen-decomposition of the {self.replicates * len(self.keys)}' \
+              f' models completed.')
         print(f'took {np.round((time.time()  - tic) / 60, 3)} minutes.')
      
-    def sgd(self, r, G2_dic_p):
+    def sgd(self, r, G2_dic):
         temp_integral = []
-        for sign_s in self.signs:
-            for sign_l in self.signs:
-                eigvi = sign_s * self.sort_eigenv_p0[r][1]
-                eigvj = sign_l * G2_dic_p[r][1]
-                vri = sorted(self.normalize_eigenv(eigvi))
-                vrj = sorted(self.normalize_eigenv(eigvj))
-                temp_integral.append(self.emp_cdf_distance(vri, vrj)) 
+        for sign in self.signs:
+            eigvi = sign[0] * self.sort_eigenv_ref[r][1]
+            eigvj = sign[1] * G2_dic[r][1]
+            vri = sorted(self.normalize_eigenv(eigvi))
+            vrj = sorted(self.normalize_eigenv(eigvj))
+            temp_integral.append(self.emp_cdf_distance(vri, vrj)) 
         return min(temp_integral)
 
     def fit_SGD(self):
         tic = time.time()
-        print(f'The spectral distance between G({self.p0}) and G(p) is an average  ' \
-              f'of the SGD between G({self.p0}) and the {self.replicates} replicate models' \
-              f' generated per each of the {len(self.p)}' \
-              f' rewiring probability.')
+        print(f'The spectral distance between G({self.ref}) and G(~) is an average  ' \
+              f'of the SGD between G({self.ref}) and the {self.replicates} replicate models' \
+              f' for the {len(self.keys)} generations.')
         print()
         self.rep_sgd = {}
-        self.time_p = []
+        self.time = []
     
-        for idx, rp in enumerate(self.p):
-            tic_p = time.time() 
+        for idx, key in enumerate(self.keys):
+            tic_ = time.time() 
             replicate_distance = []
             for rep in range(self.replicates):
-                G2_dic_p  = self.sort_eigenv_dic[rp][rep]
+                G2_dic  = self.sort_eigenv_dic[key][rep]
                 integral_list = []
                 for r in range(1, self.n):
-                    integral_list.append(self.sgd(r, G2_dic_p))
+                    integral_list.append(self.sgd(r, G2_dic))
                 replicate_distance.append(sum(integral_list)/(self.n - 1))
-            self.rep_sgd[rp] = replicate_distance
-            tac_p = time.time()
-            time_rp = (tac_p - tic_p) / 60
-            self.time_p.append(time_rp)
-            print(f'd(G({self.p0}), G({rp})): {np.mean(self.rep_sgd[rp])}, ' \
-                  f'took: {np.round(time_rp, 4)} minutes') 
+            self.rep_sgd[key] = replicate_distance
+            tac_ = time.time()
+            time_ = (tac_ - tic_) / 60
+            self.time.append(time_)
+            print(f'd(G({np.round(self.ref,3)}), G({np.round(key,3)})): {np.mean(self.rep_sgd[key])}, ' \
+                  f'took: {np.round(time_, 4)} minutes') 
         tac = time.time()
         print()
-        print(f'Process took {(tac-tic)/60} minutes with an average of {np.mean(self.time_p)} per p')
+        print(f'Process took {(tac-tic)/60} minutes with an average of {np.mean(self.time)} per generation')
