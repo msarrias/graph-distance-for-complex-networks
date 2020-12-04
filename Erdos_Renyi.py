@@ -18,5 +18,4 @@ class erdos_renyi_graph:
                 if (i < j):  
                     eps = random.uniform(0,1)
                     if (eps < self.p): 
-                        self.ER.add_edge(i, j, 
-                                         self.weight)
+                        self.ER.add_edge(i, j, self.weight)

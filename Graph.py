@@ -4,7 +4,6 @@ class Graph:
         self.init_nodes()
         self.weighted_edges = []
         self.edges = []
-        self.V = 0
         self.weight = weight
         
     def init_nodes(self):
@@ -13,7 +12,6 @@ class Graph:
         
     def add_edge(self, node1, node2, weight=1):
         if (node1, node2) not in self.edges and node1 != node2:
-            self.V +=1
             self.graph[node1][node2] = weight
             self.graph[node2][node1] = weight
             self.edges.append((node1,node2))
