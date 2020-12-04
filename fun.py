@@ -1,13 +1,199 @@
 import numpy as np
-import networkx as nx
+import random, time, math, json
 from scipy.integrate import quad
 import scipy.linalg as la
-from matplotlib import pyplot as plt
-from scipy.integrate import quad
-import random, time, math, json
 from collections import Counter
+from matplotlib import pyplot as plt
+import networkx as nx
+from Graph import Graph
 
-#=========================SIMULATED-GRAPHS===============================#
+def fit_sgd_for_all_ref_models(first_k0, k0_list, sgd_obj, models_dict):
+    sgd_dic = {}
+    sgd_obj.eigenspectrum_G_ref()
+    sgd_obj.eigenspectrum_G()
+    print("")
+    print("")
+    print(f"SGD between G({first_k0}) and G(k)")
+    print("")
+    sgd_obj.fit_SGD()
+    sgd_dic[first_k0] = sgd_obj.rep_sgd
+    for k0 in k0_list[1:]:
+        print("~~~~~~~~~~:~~~~~~~~~~")
+        print(f"SGD between G({k0}) and G(k)")
+        print("")
+        sgd_obj.reset_G_ref(k0, models_dict['models_ref'][k0])
+        sgd_obj.eigenspectrum_G_ref()
+        sgd_obj.fit_SGD()
+        sgd_dic[k0] = sgd_obj.rep_sgd
+        print("")
+        print("~~~~~~~~~~:~~~~~~~~~~")
+    return(sgd_dic)
+
+def fit_sgd_for_all_ref_modelsp(first_p0, p0_list, sgd_obj, models_dict):
+    sgd_dic = {}
+    sgd_obj.eigenspectrum_G_ref()
+    sgd_obj.eigenspectrum_G()
+    print("")
+    print("")
+    print(f"SGD between G({first_p0}) and G(p)")
+    print("")
+    sgd_obj.fit_SGD()
+    sgd_dic[first_p0] = sgd_obj.rep_sgd
+    for p0 in p0_list[1:]:
+        print("~~~~~~~~~~:~~~~~~~~~~")
+        print(f"SGD between G({p0}) and G(p)")
+        print("")
+        sgd_obj.reset_G_ref(p0, models_dict['models_ref'][p0])
+        sgd_obj.eigenspectrum_G_ref()
+        sgd_obj.fit_SGD()
+        sgd_dic[p0] = sgd_obj.rep_sgd
+        print("")
+        print("~~~~~~~~~~:~~~~~~~~~~")
+    return(sgd_dic)
+
+#=========================SIMULATE-GRAPHS===============================#
+
+def generate_dump_WS_models_file_fixed_p(n, p, replicates, k0_list,
+                                         k_list, file_direct):
+    #generate reference models
+    WS_models_G0 = {}
+    for k in k0_list:
+        WS_models_G0[k] = nx.watts_strogatz_graph(n, int(k), p)
+    #generate replicate models
+    WS_models_Gk = {}
+    for k in k_list:
+        graph_dic = {}
+        for j in range(replicates):
+            graph_dic[j] = nx.watts_strogatz_graph(n, int(k), p)
+        WS_models_Gk[k] = graph_dic
+    #keep all in a dict
+    WS_models_k = {}
+    WS_models_k['models_ref'] = WS_models_G0
+    WS_models_k['models'] = WS_models_Gk
+    #dump in a json format file
+    nx.write_gpickle(WS_models_k, file_direct)
+    
+def generate_dump_WS_models_file_fixed_k(n, k, replicates, p0_list,
+                                         p_list, file_direct):
+    #generate reference models
+    WS_models_G0 = {}
+    for p in p0_list:
+        WS_models_G0[p] = nx.watts_strogatz_graph(n, k, p)
+    #generate replicate models
+    WS_models_Gp = {}
+    for p in p_list:
+        graph_dic = {}
+        for j in range(replicates):
+            graph_dic[j] = nx.watts_strogatz_graph(n, k, p)
+        WS_models_Gp[p] = graph_dic
+    #keep all in a dict
+    WS_models_p = {}
+    WS_models_p['models_ref'] = WS_models_G0
+    WS_models_p['models'] = WS_models_Gp
+    #dump in a json format file
+    nx.write_gpickle(WS_models_p, file_direct)
+
+def generate_dump_ER_models_fixed_n(p_list, p0_list, replicates,
+                                    n, filedirect):
+    #generate reference models
+    ER_G0 = {}
+    for p in p0_list:
+        graph = ERB(n, p)
+        while not nx.is_connected(graph):
+            graph = ERB(n, p)
+        ER_G0[p] = graph 
+    #generate replicate models
+    ER_G = {}
+    for p in p_list:
+        temp = {}
+        for rep in range(replicates):
+            graph = ERB(n, p)
+            while not nx.is_connected(graph):
+                graph = ERB(n, p)
+            temp[rep] = graph
+        ER_G[p] = temp
+    ER_Graphs = {}
+    ER_Graphs['models_ref'] = ER_G0
+    ER_Graphs['models'] = ER_G
+    nx.write_gpickle(ER_Graphs, filedirect)
+    
+#=========================A-MATRIX-OF-SIMULATED-GRAPHS=====================#
+def compute_A_matrix(models_ref, models):
+    A_dic_ref_models = {}
+    for par_i in models_ref.keys():
+        A_dic_ref_models[par_i] = (nx.adjacency_matrix(models_ref[par_i])).todense()
+    A_models = {}
+    for par_j, val_dic in models.items():
+        A_dic_temp = {}
+        for idx, it_graph in enumerate(list(val_dic.values())):
+            A_dic_temp[idx] = (nx.adjacency_matrix(it_graph)).todense()
+        A_models[par_j] = A_dic_temp
+    A_dic = {}
+    A_dic['models_ref'] = A_dic_ref_models
+    A_dic['models'] = A_models
+    return A_dic
+#=========================SIMULATED-RESULTS===============================#
+def avg_simulations_sgd_results(simulations_sgd_dic):
+    avg_dic = {}
+    std_dic = {}
+    for key, value in simulations_sgd_dic.items():
+        avg_dic[key] = [np.mean(value[i]) for i in value.keys()]
+        std_dic[key] = [np.std(value[i]) for i in value.keys()]
+    return avg_dic, std_dic
+
+def compute_avg_hamming_distance(A_matrix):
+    hd_model_0 = {}
+    hd_model_avg_0 = {}
+    par_list = list(A_matrix['models'].keys())
+    replicates = len(A_matrix['models'][par_list[0]].keys())
+    for ref, A_0 in A_matrix['models_ref'].items():
+        hd_model_0[ref] = hamming_dist_models(A_0, A_matrix['models'], replicates)
+        hd_model_avg_0[ref] = [np.mean(hd_model_0[ref][p]) for p in A_matrix['models'].keys()]
+    return hd_model_avg_0
+
+def mean_std_sim_dict(sim_dict):
+    mean_dic = {}
+    std_dic = {}
+    for key, value in sim_dict.items():
+        mean_dic[key] = [np.mean(value[i]) for i in value.keys()]
+        std_dic[key] = [np.std(value[i]) for i in value.keys()]
+    return mean_dic, std_dic
+#=========================SIMULATED-MODELS-DEGREE-DISTRIBUTION============================#
+
+def compute_dd_probd(A_dic):
+    dd_k0_dic = {}
+    prob_dd_k0_dic = {}
+    lists = {}
+    for key_, A in A_dic.items():
+        dd_k0 = {}
+        for key, value in A['models_ref'].items():
+            dd_k0[key] = np.asarray(sum(value))[0]
+        dd_k0_dic[key_] = dd_k0
+        
+        prob_dd_k0 = {}
+        for key, value in dd_k0.items():
+            temp_dd = Counter(value)
+            prob_dd_k0[key] = {key: values / sum(temp_dd.values()) for key,
+                               values in temp_dd.items()}
+        prob_dd_k0_dic[key_] = prob_dd_k0
+        
+        lists[key_] = [sorted(zip(list(prob_dd_k0[k].keys()), 
+                                  list(prob_dd_k0[k].values())), 
+                              key=lambda x: x[0]) for k in list(prob_dd_k0.keys())]
+
+    return dd_k0_dic, prob_dd_k0_dic, lists
+
+def supports(sorted_list, k):
+    return [sorted_list[k][i][0] for i in range(len(sorted_list[k]))]
+
+def prob_distrib(sorted_list, k):
+    if sum([sorted_list[k][i][1] 
+            for i in range(len(sorted_list[k]))]) <= 1-1e-10:
+        raise Exception('there is something wrong')
+    else:
+        return [sorted_list[k][i][1] for i in range(len(sorted_list[k]))]
+    
+#=================================================================================#
 def ERB(N, p):
     g = nx.Graph() 
     g.add_nodes_from(range(1, N + 1)) 
@@ -17,6 +203,18 @@ def ERB(N, p):
                 eps = random.random() 
                 if (eps < p): 
                     g.add_edge(i, j)
+    return g
+
+def erdos_renyi(N, p, weight = 1, seed = False): 
+    if seed: random.seed(seed)       
+    g = Graph(N)
+    g.init_nodes()
+    for i in g.nodes(): 
+        for j in g.nodes(): 
+            if (i < j):  
+                eps = random.uniform(0,1)
+                if (eps < p): 
+                    g.add_edge(i, j, weight)
     return g
 #=========================================================================#
 def cdf_(N, y, v):
@@ -272,7 +470,7 @@ def savage_plot(mean_list, p_list,  p0, std_list, hd_avg_list, ylims_sgd, y_lims
     ax2.tick_params(axis = 'y', labelcolor = color)
     fig.tight_layout()
     plt.show()
-# ===================================================================================== #
+# ===================================================================== #
 def taro_graph():
     # Create the set of all members
     all_members = set(range(22))
@@ -340,3 +538,43 @@ def savage_plot_(graphs_list):
     axs[1,2].axis('off')
     axs[1,2].set_title("Florentine Families")
     plt.show()   
+    
+#=========================PLOT=RESULTS-SIMULATE-GRAPHS=====================#    
+def plot_sgd_and_hammingd(ref_par_list, par_list, avg_dic,
+                          std_dic, avg_hd, save_fig_list, par = 'p' ):
+    fig = plt.figure(figsize=(20, 4))
+    for i in range(len(ref_par_list)):
+        par0 = ref_par_list[i]
+        plt.subplot(1, 5, i+1)
+        plt.tight_layout()
+        if par == 'p':
+            plt.title(r'$p_0$ = ' + str(par0))
+            plt.xlabel('p')
+        else:
+            plt.title(r'$k_0$ = ' + str(par0))
+            plt.xlabel('k')
+        plt.ylabel('Spectral graph distance.')
+        plt.plot(par_list, avg_dic[par0], '-o', color = 'red')
+        plt.plot(par_list[np.argmin(avg_dic[par0])], 
+                 np.min(avg_dic[par0]), 'x', color = 'blue')
+        plt.axvline(x = par0, color = 'blue', linestyle = '--')
+        minus_std = [avg_dic[par0][i] - std_dic[par0][i] 
+                     for i in range(len(par_list))]
+        plus_std = [avg_dic[par0][i] + std_dic[par0][i] 
+                    for i in range(len(par_list))]
+        plt.fill_between(par_list, minus_std, plus_std,
+                         color = 'lightgrey')
+    if save_fig_list[1] != 'none':
+        plt.savefig(save_fig_list[0])
+    fig = plt.figure(figsize=(20, 4))
+    for i in range(len(ref_par_list)):
+        par0 = ref_par_list[i]
+        plt.subplot(1, 5, i+1)
+        plt.tight_layout()
+        if par == 'p': plt.xlabel('p')
+        else: plt.xlabel('k')
+        plt.ylabel('Hamming Distance')
+        plt.axvline(x = par0, color = 'blue', linestyle = '--')
+        plt.plot(par_list, avg_hd[par0], '-o', color = 'red')
+    if save_fig_list[1] != 'none':
+        plt.savefig(save_fig_list[1])
